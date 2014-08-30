@@ -1,0 +1,15 @@
+/*
+ *  xkbgrowl_Prefix.pch
+ *
+ *  Created by Matthias Wiesmann on 16.08.09.
+ *  Copyright 2009 Matthias Wiesmann. All rights reserved.
+ *  The source code of this program is licensed under the Apache 2.0 license.
+ *  For more information, see http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Prefix header for all source files of the 'xkbgrowl' target in the 'xkbgrowl' project.
+ *
+ */
+
+#ifdef __OBJC__
+    #import <Foundation/Foundation.h>
+#endif
