@@ -35,10 +35,10 @@
 
 #include "x11Util.h"
 
-const char* const kNoGrowlError = "Could not connect to Growl\n";
-const char* const kGrowlVersionMessage = "Connected to Growl %s.\n";
-const char* const kUsage = "X11 Keyboard bell to Growl notification bridge.\nUsage: %s [-display DISPLAY]\n";
-const char* const kDisplayEnv = "DISPLAY";
+const char kNoGrowlError[] = "Could not connect to Growl\n";
+const char kGrowlVersionMessage[] = "Connected to Growl %s.\n";
+const char kUsage[] = "X11 Keyboard bell to Growl notification bridge.\nUsage: %s [-display DISPLAY]\n";
+const char kDisplayEnv[] = "DISPLAY";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Growl Notification interface.
@@ -91,7 +91,7 @@ NSData* getX11IconData() {
 // scaling.
 // ─────────────────────────────────────────────────────────────────────────────
 
-NSData *getX11IconDataFromPath(NSString* iconPath, NSString* maskPath) {
+NSData* getX11IconDataFromPath(NSString* iconPath, NSString* maskPath) {
   NSURL* url = [NSURL fileURLWithPath: iconPath];
   CIImage* image = [CIImage imageWithContentsOfURL: url];
   if (maskPath) {
@@ -210,11 +210,9 @@ int main (int argc, char* const * argv) {
   X11DisplayData* x11Display =  X11DisplayData::GetDisplayData(argv[0], display);
   id<GrowlNotificationProtocol> growlProxy = getGrowlProxy();
   while(true) {
-    NSAutoreleasePool *innerPool = [[NSAutoreleasePool alloc] init];
     BellEvent* event = x11Display->NextBellEvent();
     NSDictionary* eventDict = dictionaryForEvent(event, defaultIcon);
     [growlProxy postNotificationWithDictionary: eventDict];
-    [innerPool release];
     delete event;
   }
   delete x11Display;
