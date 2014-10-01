@@ -52,8 +52,9 @@ const size_t kBufferSize = 256;
 // Output a pixmap into a file.
 // If the conversion is sucessful, this function returns a new string with the path of
 // the file, both the string and the file should be deleted when not needed anymore.
-// @return a path allocated on the stack, or null
-char* OutputPixMap(Pixmap pixmap, Display* display, const char* const name, long serial) {
+// @return a path allocated on the stack, or nullptr
+// Avoid the round-trip to the file-system and also forced convesion to black/white.
+std::string OutputPixMap(Pixmap pixmap, Display* display, const std::string& name, long serial) {
   Window root;
   int x, y; 
   unsigned int width, height;
@@ -61,17 +62,16 @@ char* OutputPixMap(Pixmap pixmap, Display* display, const char* const name, long
   Status status = 0;
   status = XGetGeometry(display, pixmap, &root, &x, &y,  &width, &height, &border, &depth);
   if (!status) {
-    return NULL;
+    return std::string();
   }
-  char* path = new char[kBufferSize];
-  snprintf(path, kBufferSize, "/tmp/%s_%lx.xpm", name, serial);
-  status = XWriteBitmapFile(display, path, pixmap, width, height, -1 , -1);
+  char buffer[kBufferSize];
+  snprintf(buffer, kBufferSize, "/tmp/%s_%06lx.xpm", name.c_str(), serial);
+  status = XWriteBitmapFile(display, buffer, pixmap, width, height, -1 , -1);
   if (status != BitmapSuccess) {
-    delete path;
-    fprintf(stderr, kWriteBitmapError, path, status);
-    return NULL;
+    fprintf(stderr, kWriteBitmapError, buffer, status);
+    return std::string();
   }
-  return path;
+  return buffer;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -81,8 +81,8 @@ char* OutputPixMap(Pixmap pixmap, Display* display, const char* const name, long
 BellEvent::BellEvent() {}
 BellEvent::~BellEvent() {}
 
-X11DisplayData::X11DisplayData(const char* programName,
-                               const char* displayName) : _programName(programName), _displayName(displayName) {}
+X11DisplayData::X11DisplayData(const std::string& programName,
+                               const std::string& displayName) : programName_(programName), displayName_(displayName) {}
 
 X11DisplayData::~X11DisplayData() {}
 
@@ -94,20 +94,20 @@ class X11DisplayDataImpl : public X11DisplayData {
 private:
   X11DisplayDataImpl& operator=(const X11DisplayDataImpl& other) {return *this;}
 protected:
-  Display* _display;  // not owned
-  int _xkbOpcode;
-  int _xkbEventCode;
+  Display* display_;  // not owned
+  int xkbOpcode_;
+  int xkbEventCode_;
 public:
-  X11DisplayDataImpl(const char* programName, const char* displayName);
+  X11DisplayDataImpl(const std::string& programName, const std::string& displayName);
   virtual ~X11DisplayDataImpl();
   virtual BellEvent* NextBellEvent();
-  Display* display() { return _display; }
-  virtual void SendBellEvent(const char* name);
+  Display* display() { return display_; }
+  virtual void SendBellEvent(const std::string& name);
 };
 
 
-X11DisplayData* X11DisplayData::GetDisplayData(const char* programName,
-                                               const char* displayName) {
+X11DisplayData* X11DisplayData::GetDisplayData(const std::string& programName,
+                                               const std::string& displayName) {
   return new X11DisplayDataImpl(programName, displayName);
 }
 
@@ -122,48 +122,48 @@ struct X11Version {
 // Most of the code is for error handling
 // ─────────────────────────────────────────────────────────────────────────────
 X11DisplayDataImpl::X11DisplayDataImpl(
-                                       const char* programName,
-                                       const char* displayName)
-: X11DisplayData(programName, displayName), _display(NULL), _xkbOpcode(0), _xkbEventCode(0) {
+                                       const std::string& programName,
+                                       const std::string& displayName)
+: X11DisplayData(programName, displayName), display_(nullptr), xkbOpcode_(0), xkbEventCode_(0) {
   X11Version version = { XkbMajorVersion, XkbMinorVersion };
   int error = 0;
-  _display = XkbOpenDisplay(const_cast<char *>(displayName), &_xkbEventCode,
-                            NULL, &version.major, &version.minor, &error);
-  if (_display == NULL) {
+  display_ = XkbOpenDisplay(const_cast<char *>(displayName.c_str()), &xkbEventCode_,
+                            nullptr, &version.major, &version.minor, &error);
+  if (display_ == nullptr) {
     switch (error) {
       case XkbOD_BadLibraryVersion:
-        fprintf(stderr, kWrongVersionFormat, programName, XkbMajorVersion,
+        fprintf(stderr, kWrongVersionFormat, programName.c_str(), XkbMajorVersion,
                 XkbMinorVersion, version.major, version.minor, "library");
         exit(EX_CONFIG);
       case XkbOD_BadServerVersion:
-        fprintf(stderr, kWrongVersionFormat, programName, XkbMajorVersion,
-                XkbMinorVersion, version.major, version.minor, displayName);
+        fprintf(stderr, kWrongVersionFormat, programName.c_str(), XkbMajorVersion,
+                XkbMinorVersion, version.major, version.minor, displayName.c_str());
         exit(EX_CONFIG);
       case XkbOD_ConnectionRefused:
-        fprintf(stderr, kConnectionRefusedFormat, displayName);
+        fprintf(stderr, kConnectionRefusedFormat, displayName.c_str());
         exit(EX_UNAVAILABLE);
       case XkbOD_NonXkbServer:
-        fprintf(stderr, kNonXkbServerFormat, displayName);
+        fprintf(stderr, kNonXkbServerFormat, displayName.c_str());
         exit(EX_UNAVAILABLE);
       default:
-        fprintf(stderr, kUnknownErrorFormat, error, displayName);
+        fprintf(stderr, kUnknownErrorFormat, error, displayName.c_str());
         exit(EX_SOFTWARE);
     } // switch
   }
   int eventMask = XkbBellNotifyMask;
-  if (!XkbSelectEvents(_display, XkbUseCoreKbd, eventMask, eventMask)) {
-    fprintf(stderr, kSelectEventErrorFormat, displayName);
+  if (!XkbSelectEvents(display_, XkbUseCoreKbd, eventMask, eventMask)) {
+    fprintf(stderr, kSelectEventErrorFormat, displayName.c_str());
     exit(EX_SOFTWARE);
   }
 }
 
-void X11DisplayDataImpl::SendBellEvent(const char* name) {
-  Atom bell_name = XInternAtom(display(), name, False);
-  XkbBellEvent(display(), None, 100, bell_name);
+void X11DisplayDataImpl::SendBellEvent(const std::string& name) {
+  Atom bellname_ = XInternAtom(display(), name.c_str(), False);
+  XkbBellEvent(display(), None, 100, bellname_);
 }
 
 X11DisplayDataImpl::~X11DisplayDataImpl() {
-  XCloseDisplay(_display);
+  XCloseDisplay(display_);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -174,27 +174,27 @@ X11DisplayDataImpl::~X11DisplayDataImpl() {
 class BellEventImpl : public BellEvent {
 public:
   BellEventImpl(X11DisplayDataImpl* data);
-  virtual  ~BellEventImpl();
-  virtual const char* name() const;
-  virtual const char* windowName() const;
+  virtual ~BellEventImpl();
+  virtual std::string name() const;
+  virtual std::string windowName() const;
   virtual int pitch() const;
   virtual int percent() const;
   virtual int duration() const;
   virtual int bellClass() const;
   virtual int bellId() const;
   virtual bool eventOnly() const;
-  virtual const char* iconPath() const;
-  virtual const char* iconMaskPath() const;
-  virtual const char* hostName() const;
+  virtual std::string iconPath() const;
+  virtual std::string iconMaskPath() const;
+  virtual std::string hostName() const;
 protected:
-  X11DisplayDataImpl* _data;
-  XkbEvent _event;
-  char* _name; 
-  char* _windowName;
-  char* _iconPath;
-  char* _iconMaskPath;
-  XTextProperty _hostName;
-  XWMHints* _wmHints;
+  X11DisplayDataImpl* data_;
+  XkbEvent event_;
+  char* name_; 
+  char* windowName_;
+  std::string iconPath_;
+  std::string iconMaskPath_;
+  XTextProperty hostName_;
+  XWMHints* wmHints_;
   inline Display* display();
   inline Window window();
   void GetAttributesFromWindow(Window window);
@@ -202,11 +202,13 @@ protected:
 
 // Constructor, gets the event from the display
 BellEventImpl::BellEventImpl(X11DisplayDataImpl* data) : 
-    _data(data), _event(), _name(NULL), _windowName(NULL), _iconPath(NULL),_iconMaskPath(NULL),  _wmHints(NULL) {
-  XNextEvent(display(), &_event.core);
-  if (_event.bell.name) {
-    _name = XGetAtomName(_data->display(), _event.bell.name);
-  } 
+    data_(data), event_(), name_(nullptr), windowName_(nullptr),
+    iconPath_(), iconMaskPath_(),  wmHints_(nullptr) {
+  XNextEvent(display(), &event_.core);
+  if (event_.bell.name) {
+    // XGetAtomName -> must be freed with XFree().
+    name_ = XGetAtomName(data_->display(), event_.bell.name);
+  }
   if (window()) {
     GetAttributesFromWindow(window());
   } else {
@@ -217,40 +219,38 @@ BellEventImpl::BellEventImpl(X11DisplayDataImpl* data) :
 }
 
 BellEventImpl::~BellEventImpl() {
-  if (_name) {
-    XFree(_name);
-    _name = NULL;
+  if (name_) {
+    XFree(name_);
+    name_ = nullptr;
   }
-  if (_windowName) {
-    XFree(_windowName);
-    _windowName = NULL;
+  if (windowName_) {
+    XFree(windowName_);
+    windowName_ = nullptr;
   }
-  if (_wmHints) {
-    XFree(_wmHints);
-    _wmHints = NULL;
+  if (wmHints_) {
+    XFree(wmHints_);
+    wmHints_ = nullptr;
   }
-  if (_hostName.value) {
-    XFree(_hostName.value);
+  if (hostName_.value) {
+    XFree(hostName_.value);
   }
-  if (_iconPath) {
-    const int status = unlink(_iconPath);
+  if (!iconPath_.empty()) {
+    const int status = unlink(iconPath_.c_str());
     if (status != 0) {
       char buffer[kBufferSize];
-      snprintf(buffer, sizeof(buffer), kUnlinkError, _iconPath);
+      snprintf(buffer, sizeof(buffer), kUnlinkError, iconPath_.c_str());
       perror(buffer);
     }
-    delete _iconPath;
-    _iconPath = NULL;
+    iconPath_.clear();
   }
-  if (_iconMaskPath) {
-    const int status = unlink(_iconMaskPath);
+  if (!iconPath_.empty()) {
+    const int status = unlink(iconMaskPath_.c_str());
     if (status != 0) {
       char buffer[kBufferSize];
-      snprintf(buffer, sizeof(buffer), kUnlinkError, _iconMaskPath);
+      snprintf(buffer, sizeof(buffer), kUnlinkError, iconMaskPath_.c_str());
       perror(buffer);
     }
-    delete _iconMaskPath;
-    _iconMaskPath = NULL;
+    iconPath_.clear();
   }
 }
 
@@ -262,80 +262,87 @@ BellEventImpl::~BellEventImpl() {
 
 void BellEventImpl::GetAttributesFromWindow(Window window) {
   assert(window);
-  const Status nameStatus = XFetchName(display(), window, &_windowName);
+  const Status nameStatus = XFetchName(display(), window, &windowName_);
   if (nameStatus == 0) {
     fprintf(stderr, kWindowNameError, window);
   }
-  const Status hostStatus = XGetWMClientMachine(display(), window, &_hostName);
+  const Status hostStatus = XGetWMClientMachine(display(), window, &hostName_);
   if (hostStatus == 0) {
     fprintf(stderr, kUnknownClientNameError, window);
   }
-  _wmHints = XGetWMHints(display(), window);
-  if (_wmHints) {
-    if (_wmHints->flags & IconPixmapHint) {
-      _iconPath = OutputPixMap(_wmHints->icon_pixmap, display(), kPixMapName, _event.bell.serial);
+  wmHints_ = XGetWMHints(display(), window);
+  if (wmHints_) {
+    if (wmHints_->flags & IconPixmapHint) {
+      iconPath_ = OutputPixMap(wmHints_->icon_pixmap, display(), kPixMapName, event_.bell.serial);
     }
-    if (_wmHints->flags & IconMaskHint) {
-      _iconMaskPath = OutputPixMap(_wmHints->icon_mask, display(), kPixMapMaskName, _event.bell.serial);
+    if (wmHints_->flags & IconMaskHint) {
+      iconMaskPath_ = OutputPixMap(wmHints_->icon_mask, display(), kPixMapMaskName, event_.bell.serial);
     }
-  } // Has _wmHints
+  } // Has wmHints_
 }
 
 Display* BellEventImpl::display() {
-  return _data->display();
+  return data_->display();
 }
 
 Window BellEventImpl::window() {
-  return _event.bell.window;
+  return event_.bell.window;
 }
 
-const char* BellEventImpl::iconPath() const {
-  return _iconPath;
+std::string BellEventImpl::iconPath() const {
+  return iconPath_;
 }
 
-const char* BellEventImpl::iconMaskPath() const {
-  return _iconMaskPath;
+std::string BellEventImpl::iconMaskPath() const {
+  return iconMaskPath_;
 }
 
 // Name is an X11 atom, and therefore in iso-latin encoding
-const char* BellEventImpl::name() const {
-  if (_name) {
-    return _name;
+std::string BellEventImpl::name() const {
+  if (name_) {
+    return name_;
   } else {
     return kEmptyString;
   }
 }
 
-const char* BellEventImpl::windowName() const {
-  return _windowName;
+std::string BellEventImpl::windowName() const {
+  if (windowName_) {
+    return windowName_;
+  }
+  return kEmptyString;
 }
 
-const char* BellEventImpl::hostName() const {
-  return reinterpret_cast<const char*>(_hostName.value);
+std::string BellEventImpl::hostName() const {
+  const char* const hostname = reinterpret_cast<const char*>(hostName_.value);
+  if (hostname) {
+    return hostname;
+  }
+  return kEmptyString;
 }
 
 int BellEventImpl::pitch() const {
-  return _event.bell.pitch;
+  return event_.bell.pitch;
 }
 
 int BellEventImpl::percent() const {
-  return _event.bell.percent;
+  return event_.bell.percent;
 }
 
 int BellEventImpl::duration() const {
-  return _event.bell.duration;
+  return event_.bell.duration;
 }
 
 int BellEventImpl::bellClass() const {
-  return _event.bell.bell_class;
+  return event_.bell.bell_class;
 }
 
 int BellEventImpl::bellId() const {
-  return _event.bell.bell_id;
+  return event_.bell.bell_id;
 }
 
 bool BellEventImpl::eventOnly() const {
-  return _event.bell.event_only;
+  return event_.bell.event_only;
 }
 
 BellEvent* X11DisplayDataImpl::NextBellEvent() {

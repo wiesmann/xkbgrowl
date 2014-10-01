@@ -8,6 +8,8 @@
  *  For more information, see http://www.apache.org/licenses/LICENSE-2.0
  */
 
+#include <string>
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Wrapper interface that holds the various elements of a X11 bell event.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -15,11 +17,11 @@ class BellEvent {
  public:
   BellEvent();
   virtual ~BellEvent();
-  virtual const char* name() const = 0;        // name of the event
-  virtual const char* windowName() const = 0;  // window name or null
-  virtual const char* iconPath() const = 0;    // path to icon file or null
-  virtual const char* iconMaskPath() const = 0;// path to mask file or null
-  virtual const char* hostName() const = 0;    // hostname where event occured
+  virtual std::string name() const = 0;        // name of the event
+  virtual std::string windowName() const = 0;  // window name or empty
+  virtual std::string iconPath() const = 0;    // path to icon file or empty
+  virtual std::string iconMaskPath() const = 0;// path to mask file or empty
+  virtual std::string hostName() const = 0;    // hostname where event occured
   virtual int pitch() const = 0;               // beep pitch
   virtual int percent() const = 0;             // beep percentage -100 - 100
   virtual int duration() const = 0;            // beep duration
@@ -36,14 +38,14 @@ class BellEvent {
 
 class X11DisplayData {
  protected:
-  const char* const _displayName;
-  const char* const _programName;
-  explicit X11DisplayData(const char* programName, const char* displayName);
+  const std::string displayName_;
+  const std::string programName_;
+  explicit X11DisplayData(const std::string& programName, const std::string& displayName);
  public:
-  /// Factory method, constructs a concrete instance
-  static X11DisplayData* GetDisplayData(const char* programName, const char* displayName);
+  /// Factory method, constructs a concrete instance, caller owns the instance.
+  static X11DisplayData* GetDisplayData(const std::string& programName, const std::string& displayName);
   virtual ~X11DisplayData();
-  virtual BellEvent* NextBellEvent() = 0;            // block until next event
-  virtual void SendBellEvent(const char* name) = 0;  // send a new bell event
+  virtual BellEvent* NextBellEvent() = 0;            // block until next event, event is owned by caller.
+  virtual void SendBellEvent(const std::string& name) = 0;  // send a new bell event
 };
 

@@ -32,6 +32,7 @@
 #include <sysexits.h>
 #include <signal.h>
 #include <getopt.h>
+#include <memory>
 
 #include "x11Util.h"
 
@@ -78,7 +79,7 @@ id<GrowlNotificationProtocol> getGrowlProxy() {
 // ─────────────────────────────────────────────────────────────────────────────
 NSData* getX11IconData() {
   NSWorkspace* workspace = [NSWorkspace sharedWorkspace];
-  NSString* x11Path = [workspace fullPathForApplication:@"X11"];
+  NSString* x11Path = [workspace fullPathForApplication:@"XQuartz"];
   NSImage* x11Icon = [workspace iconForFile: x11Path];
   NSData* icon =[x11Icon TIFFRepresentation];
   return icon;
@@ -97,7 +98,7 @@ NSData* getX11IconDataFromPath(NSString* iconPath, NSString* maskPath) {
   if (maskPath) {
     NSURL* maskUrl = [NSURL fileURLWithPath: maskPath];
     CIImage* mask = [CIImage imageWithContentsOfURL: maskUrl];
-    CIColor* color = [CIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:0.1];
+    CIColor* color = [CIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:0.5];
     CIImage* background = [CIImage imageWithColor: color];
     // Mask pixmap is typically inverted, so we swap background and image.
     CIFilter* blend = [CIFilter filterWithName:@"CIBlendWithMask"];
@@ -107,20 +108,24 @@ NSData* getX11IconDataFromPath(NSString* iconPath, NSString* maskPath) {
     image = [blend valueForKey:@"outputImage"];
   }
   CGSize originalSize = [image extent].size;
-  NSSize targetSize = NSMakeSize(96, 96);
-  // Affine transform to scale the image
-  NSAffineTransform* zoomTransform = [NSAffineTransform transform];
-  [zoomTransform scaleXBy:targetSize.width / originalSize.width yBy: targetSize.height / originalSize.height ];
-  CIFilter* affine = [CIFilter filterWithName:@"CIAffineTransform"];
-  [affine setValue:zoomTransform forKey:@"inputTransform"];
-  [affine setValue:image forKey:@"inputImage"];
-  CIImage* outputImage = [affine valueForKey:@"outputImage"];
+  
+  NSSize targetSize = NSMakeSize(256, 256);
+  const double scale = targetSize.height / static_cast<double> (originalSize.height);
+  const double ratio = originalSize.height / static_cast<double> (originalSize.height);
+  CIFilter* scale_filter = [CIFilter filterWithName:@"CILanczosScaleTransform"];
+  [scale_filter setValue: [NSNumber numberWithFloat: scale] forKey:@"inputScale"];
+  [scale_filter setValue: [NSNumber numberWithFloat: ratio] forKey:@"inputAspectRatio"];
+  [scale_filter setValue: image forKey:@"inputImage"];
+  CIImage* outputImage = [scale_filter valueForKey:@"outputImage"];
   NSCIImageRep* repr = [NSCIImageRep imageRepWithCIImage: outputImage];
   NSImage* resultImage = [[NSImage alloc] initWithSize: targetSize];
   [resultImage addRepresentation: repr];
-  [resultImage autorelease];
   NSData* data = [resultImage TIFFRepresentation];
-  return [data autorelease];
+  return data;
+}
+
+NSString* fromStdString(const std::string& str) {
+  return [NSString stringWithCString: str.c_str()encoding: NSISOLatin1StringEncoding];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -133,14 +138,14 @@ NSDictionary* dictionaryForEvent(BellEvent* event, NSData* defaultIcon) {
   NSMutableDictionary* dictionary = [[NSMutableDictionary alloc] init];
   [dictionary setObject: @"Bell" forKey:  @"NotificationName"];
   [dictionary setObject: @"XKB" forKey: @"ApplicationName"];
-  NSString* description = [NSString stringWithCString: event->name() encoding: NSISOLatin1StringEncoding];
+  NSString* description = fromStdString(event->name());
   // If there is a window name, prepend it to the notification text
-  if (event->windowName()) {
-    NSString* windowName = [NSString stringWithCString: event->windowName() encoding: NSISOLatin1StringEncoding];
+  if (!event->windowName().empty()) {
+    NSString* windowName = fromStdString(event->windowName());
     description = [NSString stringWithFormat: @"%@: %@", windowName, description];
   }
-  if (event->hostName()) {
-    NSString* hostName = [NSString stringWithCString: event->hostName() encoding: NSISOLatin1StringEncoding];
+  if (!event->hostName().empty()) {
+    NSString* hostName = fromStdString(event->hostName());
     description = [NSString stringWithFormat: @"%@: %@", hostName, description];
   }
   [dictionary setObject: description forKey: @"NotificationDescription"];
@@ -148,18 +153,18 @@ NSDictionary* dictionaryForEvent(BellEvent* event, NSData* defaultIcon) {
   NSNumber* priority = [NSNumber numberWithInt: (event->percent() - 50) / 25];
   [dictionary setObject: priority forKey: @"NotificationPriority"];
   // If there is a X11 icon, convert it to be used by growl.
-  if (event->iconPath()) {
-    NSString* iconPath = [NSString stringWithCString: event->iconPath() encoding: NSUTF8StringEncoding];
+  if (!event->iconPath().empty()) {
+    NSString* iconPath = [NSString stringWithCString: event->iconPath().c_str() encoding: NSUTF8StringEncoding];
     NSString* maskPath = nil;
-    if (event->iconMaskPath()) {
-      maskPath = [NSString stringWithCString: event->iconMaskPath() encoding: NSUTF8StringEncoding];
+    if (!event->iconMaskPath().empty()) {
+      maskPath = [NSString stringWithCString: event->iconMaskPath().c_str() encoding: NSUTF8StringEncoding];
     }
     NSData* icon = getX11IconDataFromPath(iconPath, maskPath);
     [dictionary setObject: icon forKey: @"NotificationIcon"];
   } else {
     [dictionary setObject: defaultIcon forKey: @"NotificationIcon"];
   }
-  return [dictionary autorelease];
+  return dictionary;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -204,18 +209,14 @@ int main (int argc, char* const * argv) {
     return status;
   }
   // Set up objective-c stuff
-  NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
   [NSApplication sharedApplication];
   NSData* defaultIcon = getX11IconData();
-  X11DisplayData* x11Display =  X11DisplayData::GetDisplayData(argv[0], display);
+  std::unique_ptr<X11DisplayData> x11Display(X11DisplayData::GetDisplayData(argv[0], display));
   id<GrowlNotificationProtocol> growlProxy = getGrowlProxy();
-  while(true) {
-    BellEvent* event = x11Display->NextBellEvent();
-    NSDictionary* eventDict = dictionaryForEvent(event, defaultIcon);
+  while(true) @autoreleasepool {
+    std::unique_ptr<BellEvent> event(x11Display->NextBellEvent());
+    NSDictionary* eventDict = dictionaryForEvent(event.get(), defaultIcon);
     [growlProxy postNotificationWithDictionary: eventDict];
-    delete event;
   }
-  delete x11Display;
-  [pool drain];
   return EX_OK;
 }
