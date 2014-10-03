@@ -32,6 +32,7 @@
 #include <sysexits.h>
 #include <signal.h>
 #include <getopt.h>
+#include <sandbox.h>
 #include <memory>
 
 #include "x11Util.h"
@@ -205,15 +206,23 @@ int parse_options(int argc, char* const * argv) {
 
 
 int main (int argc, char* const * argv) {
-  const int status = parse_options(argc, argv);
-  if (status){
-    return status;
+  char* sandbox_error = nullptr;
+  // Sandbox API is deprecated, but we want to be a unix process.
+  if (sandbox_init(kSBXProfileNoWriteExceptTemporary, SANDBOX_NAMED, &sandbox_error) != 0) {
+    fprintf(stderr, "could not initialise sandbox: %s", sandbox_error);
+    sandbox_free_error(sandbox_error);
   }
+  
+  const int option_status = parse_options(argc, argv);
+  if (option_status){
+    return option_status;
+  }
+
   // Set up objective-c stuff
-  [NSApplication sharedApplication];
   NSData* defaultIcon = getX11IconData();
   std::unique_ptr<X11DisplayData> x11Display(X11DisplayData::GetDisplayData(argv[0], display));
   id<GrowlNotificationProtocol> growlProxy = getGrowlProxy();
+  
   while(true) @autoreleasepool {
     std::unique_ptr<BellEvent> event(x11Display->NextBellEvent());
     NSDictionary* eventDict = dictionaryForEvent(event.get(), defaultIcon);
