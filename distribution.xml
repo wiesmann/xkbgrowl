@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<installer-gui-script minSpecVersion="1">
+    <title>xkbgrowl</title>
+    <organization>net.codiferes.wiesmann</organization>
+    <domains enable_localSystem="true"/>
+    <options customize="never" require-scripts="true" rootVolumeOnly="true" />
+    <!-- Define documents displayed at various steps -->
+    <welcome    file="welcome.html"    mime-type="text/html" />
+    <!-- List all component packages -->
+    <pkg-ref id="net.codiferes.wiesmann.xkbgrowl"
+             version="3"
+             auth="root">output.pkg</pkg-ref>
+</installer-gui-script>

@@ -40,6 +40,7 @@ const char kNoGrowlError[] = "Could not connect to Growl\n";
 const char kGrowlVersionMessage[] = "Connected to Growl %s.\n";
 const char kUsage[] = "X11 Keyboard bell to Growl notification bridge.\nUsage: %s [-display DISPLAY]\n";
 const char kDisplayEnv[] = "DISPLAY";
+const char kDisplayArg[] = "display";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Growl Notification interface.
@@ -173,7 +174,7 @@ NSDictionary* dictionaryForEvent(BellEvent* event, NSData* defaultIcon) {
 
 
 static struct option longopts[] = {
-  { "display", optional_argument, NULL, 0},
+  { kDisplayArg, optional_argument, nullptr, 0},
 };
 
 char display[1024];

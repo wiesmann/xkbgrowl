@@ -26,18 +26,18 @@
 // Error message formats
 // ─────────────────────────────────────────────────────────────────────────────
 
-const char* const kWrongVersionFormat = "%s was compiled with XKB version %d.%02d found %d.%02d in %s\n";
-const char* const kConnectionRefusedFormat = "Could not connect to display %s.\n";
-const char* const kNonXkbServerFormat = "X11 Server %s does not support XKB.\n";
-const char* const kUnknownErrorFormat = "Unknown error %d while opening display %s.\n";
-const char* const kSelectEventErrorFormat = "Could not get XKB bell events for display %s.\n";
-const char* const kWindowNameError = "Could not retrieve name for window %lx.\n";
-const char* const kWriteBitmapError = "Could not write bitmap %s: %d\n";
-const char* const kUnlinkError = "Could not delete file %s\n";
-const char* const kUnknownClientNameError = "Could not get client name for window %lx.\n";
-const char* const kEmptyString = "";
-const char* const kPixMapName = "pixmap";
-const char* const kPixMapMaskName = "mask";
+const char kWrongVersionFormat[] = "%s was compiled with XKB version %d.%02d found %d.%02d in %s\n";
+const char kConnectionRefusedFormat[] = "Could not connect to display %s.\n";
+const char kNonXkbServerFormat[] = "X11 Server %s does not support XKB.\n";
+const char kUnknownErrorFormat[] = "Unknown error %d while opening display %s.\n";
+const char kSelectEventErrorFormat[] = "Could not get XKB bell events for display %s.\n";
+const char kWindowNameError[] = "Could not retrieve name for window %lx.\n";
+const char kWriteBitmapError[] = "Could not write bitmap %s: %d\n";
+const char kUnlinkError[] = "Could not delete file %s\n";
+const char kUnknownClientNameError[] = "Could not get client name for window %lx.\n";
+const char kEmptyString[] = "";
+const char kPixMapName[] = "pixmap";
+const char kPixMapMaskName[] = "mask";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Various constants
