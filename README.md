@@ -27,7 +27,7 @@ In both cases, either you use some tools that support X11 bell events natively, 
 
 1. Download the latest version from the [https://github.com/wiesmann/xkbgrowl/releases/](releases section).
 2. Run the installer.
-3. Modify your `.xinitrc` file to start the dœmon, for instance:
+3. Modify your `.xinitrc` file to start the dæmon, for instance:
 
 ```
 #!/bin/sh
@@ -68,6 +68,6 @@ The first point is easy to fix, but goes against my philosophy to try to leave w
 
 ### Why not use *XXX*?
 
-There are many open source frameworks to do notifications. At a low-level, [http://www.freedesktop.org/wiki/Software/dbus/](Dbus) seems to be the standard, at a higher level there are frameworks like [http://sourceforge.net/projects/mumbles/](Mumbles). My solution does not require to install a single thing on any Unix box, it uses software that has been there since 1995, and it uses the standard.
+There are many open source frameworks to do notifications. At a low-level, [Dbus](http://www.freedesktop.org/wiki/Software/dbus/) seems to be the standard, at a higher level there are frameworks like [Mumbles](http://sourceforge.net/projects/mumbles/). My solution does not require to install a single thing on any Unix box, it uses software that has been there since 1995, and it uses the standard.
 
 [![Flattr this git repo](http://api.flattr.com/button/flattr-badge-large.png)](https://flattr.com/submit/auto?user_id=thiaswiesmann&url=https://github.com/wiesmann/xkbgrowl&title=xkbgrowl&language=EN&tags=github&category=software)
