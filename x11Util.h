@@ -8,19 +8,33 @@
  *  For more information, see http://www.apache.org/licenses/LICENSE-2.0
  */
 
+#ifndef XKBGROWL_X11_UTIL
+#define XKBGROWL_X11_UTIL
 #include <string>
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Wrapper interface that holds the various elements of a X11 bell event.
 // ─────────────────────────────────────────────────────────────────────────────
+
+class ImageProxy {
+ public:
+  ImageProxy(int height, int width) : height_(height), width_(width) {}
+  virtual ~ImageProxy() {}
+  int height() const { return height_; }
+  int width() const { return width_; }
+  virtual void provideARGB(int x, int y, int width, int height, void* data) = 0;
+ protected:
+  const int height_;
+  const int width_;
+};
+
 class BellEvent {
  public:
   BellEvent();
   virtual ~BellEvent();
   virtual std::string name() const = 0;        // name of the event
   virtual std::string windowName() const = 0;  // window name or empty
-  virtual std::string iconPath() const = 0;    // path to icon file or empty
-  virtual std::string iconMaskPath() const = 0;// path to mask file or empty
   virtual std::string hostName() const = 0;    // hostname where event occured
   virtual int pitch() const = 0;               // beep pitch
   virtual int percent() const = 0;             // beep percentage -100 - 100
@@ -28,6 +42,7 @@ class BellEvent {
   virtual int bellClass() const = 0;           // beep class
   virtual int bellId() const = 0;              // beep id
   virtual bool eventOnly() const = 0;          // is this only an event
+  virtual ImageProxy* imageProxy() = 0;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -48,4 +63,6 @@ class X11DisplayData {
   virtual BellEvent* NextBellEvent() = 0;            // block until next event, event is owned by caller.
   virtual void SendBellEvent(const std::string& name) = 0;  // send a new bell event
 };
+
+#endif
 

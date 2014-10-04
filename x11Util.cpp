@@ -32,47 +32,20 @@ const char kNonXkbServerFormat[] = "X11 Server %s does not support XKB.\n";
 const char kUnknownErrorFormat[] = "Unknown error %d while opening display %s.\n";
 const char kSelectEventErrorFormat[] = "Could not get XKB bell events for display %s.\n";
 const char kWindowNameError[] = "Could not retrieve name for window %lx.\n";
-const char kWriteBitmapError[] = "Could not write bitmap %s: %d\n";
-const char kUnlinkError[] = "Could not delete file %s\n";
+
 const char kUnknownClientNameError[] = "Could not get client name for window %lx.\n";
 const char kEmptyString[] = "";
-const char kPixMapName[] = "pixmap";
-const char kPixMapMaskName[] = "mask";
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Various constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const size_t kBufferSize = 256;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Conversion function
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Output a pixmap into a file.
-// If the conversion is sucessful, this function returns a new string with the path of
-// the file, both the string and the file should be deleted when not needed anymore.
-// @return a path allocated on the stack, or nullptr
-// Avoid the round-trip to the file-system and also forced convesion to black/white.
-std::string OutputPixMap(Pixmap pixmap, Display* display, const std::string& name, long serial) {
-  Window root;
-  int x, y; 
-  unsigned int width, height;
-  unsigned int border, depth;
-  Status status = 0;
-  status = XGetGeometry(display, pixmap, &root, &x, &y,  &width, &height, &border, &depth);
-  if (!status) {
-    return std::string();
-  }
-  char buffer[kBufferSize];
-  snprintf(buffer, kBufferSize, "/tmp/%s_%06lx.xpm", name.c_str(), serial);
-  status = XWriteBitmapFile(display, buffer, pixmap, width, height, -1 , -1);
-  if (status != BitmapSuccess) {
-    fprintf(stderr, kWriteBitmapError, buffer, status);
-    return std::string();
-  }
-  return buffer;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Abstract classes methods
@@ -167,10 +140,63 @@ X11DisplayDataImpl::~X11DisplayDataImpl() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Image proxy implementation
+// ─────────────────────────────────────────────────────────────────────────────
+
+class ImageProxyImpl : public ImageProxy {
+public:
+  ImageProxyImpl(XImage* pixmap, XImage* mask, Display* display);
+  ~ImageProxyImpl();
+  
+  void provideARGB(int x, int y, int width, int height, void* data);
+private:
+  XImage* pixmap_;
+  XImage* mask_;
+  Display* display_;
+};
+
+ImageProxyImpl::ImageProxyImpl(XImage* pixmap, XImage* mask, Display* display)
+: ImageProxy(pixmap->height, pixmap->width), pixmap_(pixmap), mask_(mask), display_(display_) {
+  printf("pixmap with depth %d %d\n", pixmap->depth, pixmap->bits_per_pixel);
+}
+
+ImageProxyImpl::~ImageProxyImpl() {
+  if (pixmap_ != nullptr) {
+    XDestroyImage(pixmap_);
+  }
+  if (mask_ != nullptr) {
+    XDestroyImage(mask_);
+  }
+}
+
+
+void ImageProxyImpl::provideARGB(int x, int y, int width, int height, void* data) {
+  unsigned char* p = static_cast<unsigned char*>(data);
+  for (int y_index = y; y_index < y + height; ++y_index) {
+    for (int x_index = x; x_index < x + width; ++x_index) {
+      const unsigned long v = XGetPixel(pixmap_, x_index, y_index);
+      printf("%06lx ", v);
+      *p++ = 255;  // alpha
+      if (v) {
+        *p++ = 0x00;
+        *p++ = 0x00;
+        *p++ = 0x00;
+      } else {
+        *p++ = 0xff;
+        *p++ = 0xff;
+        *p++ = 0xff;
+      }
+    }
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Concrete implementation of the BellEvent class
 // TODO: figure out a way to avoid writing out x11 icons to files and then
 // read them back
 // ─────────────────────────────────────────────────────────────────────────────
+
 class BellEventImpl : public BellEvent {
 public:
   BellEventImpl(X11DisplayDataImpl* data);
@@ -183,27 +209,28 @@ public:
   virtual int bellClass() const;
   virtual int bellId() const;
   virtual bool eventOnly() const;
-  virtual std::string iconPath() const;
-  virtual std::string iconMaskPath() const;
   virtual std::string hostName() const;
+  virtual ImageProxy* imageProxy();
+
 protected:
+  
+  inline Display* display();
+  inline Window window();
+  void GetAttributesFromWindow(Window window);
+  
   X11DisplayDataImpl* data_;
   XkbEvent event_;
   char* name_; 
   char* windowName_;
-  std::string iconPath_;
-  std::string iconMaskPath_;
   XTextProperty hostName_;
   XWMHints* wmHints_;
-  inline Display* display();
-  inline Window window();
-  void GetAttributesFromWindow(Window window);
+  std::unique_ptr<ImageProxyImpl> image_proxy_;
 };
 
 // Constructor, gets the event from the display
 BellEventImpl::BellEventImpl(X11DisplayDataImpl* data) : 
     data_(data), event_(), name_(nullptr), windowName_(nullptr),
-    iconPath_(), iconMaskPath_(),  wmHints_(nullptr) {
+    wmHints_(nullptr) {
   XNextEvent(display(), &event_.core);
   if (event_.bell.name) {
     // XGetAtomName -> must be freed with XFree().
@@ -234,24 +261,6 @@ BellEventImpl::~BellEventImpl() {
   if (hostName_.value) {
     XFree(hostName_.value);
   }
-  if (!iconPath_.empty()) {
-    const int status = unlink(iconPath_.c_str());
-    if (status != 0) {
-      char buffer[kBufferSize];
-      snprintf(buffer, sizeof(buffer), kUnlinkError, iconPath_.c_str());
-      perror(buffer);
-    }
-    iconPath_.clear();
-  }
-  if (!iconPath_.empty()) {
-    const int status = unlink(iconMaskPath_.c_str());
-    if (status != 0) {
-      char buffer[kBufferSize];
-      snprintf(buffer, sizeof(buffer), kUnlinkError, iconMaskPath_.c_str());
-      perror(buffer);
-    }
-    iconPath_.clear();
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -273,10 +282,15 @@ void BellEventImpl::GetAttributesFromWindow(Window window) {
   wmHints_ = XGetWMHints(display(), window);
   if (wmHints_) {
     if (wmHints_->flags & IconPixmapHint) {
-      iconPath_ = OutputPixMap(wmHints_->icon_pixmap, display(), kPixMapName, event_.bell.serial);
-    }
-    if (wmHints_->flags & IconMaskHint) {
-      iconMaskPath_ = OutputPixMap(wmHints_->icon_mask, display(), kPixMapMaskName, event_.bell.serial);
+      Window root;
+      int x, y;
+      unsigned int width, height;
+      unsigned int border, depth;
+      Status status = XGetGeometry(display(), wmHints_->icon_pixmap, &root, &x, &y,  &width, &height, &border, &depth);
+      if (status) {
+        XImage* pixmap = XGetImage(display(), wmHints_->icon_pixmap, 0,0, width, height, depth, ZPixmap);
+        image_proxy_.reset(new ImageProxyImpl(pixmap, nullptr, display()));
+      }
     }
   } // Has wmHints_
 }
@@ -289,12 +303,8 @@ Window BellEventImpl::window() {
   return event_.bell.window;
 }
 
-std::string BellEventImpl::iconPath() const {
-  return iconPath_;
-}
-
-std::string BellEventImpl::iconMaskPath() const {
-  return iconMaskPath_;
+ImageProxy* BellEventImpl::imageProxy() {
+  return image_proxy_.get();
 }
 
 // Name is an X11 atom, and therefore in iso-latin encoding

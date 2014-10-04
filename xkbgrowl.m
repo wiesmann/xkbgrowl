@@ -29,6 +29,7 @@
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKit.h>
 #import <QuartzCore/CoreImage.h>
+#import "IconProvider.h"
 #include <sysexits.h>
 #include <signal.h>
 #include <getopt.h>
@@ -87,6 +88,8 @@ NSData* getX11IconData() {
   return icon;
 }
 
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Get an icon from an X11 bitmap.
 // Currently there is no real advantage in using CoreImage to do the scaling,
@@ -94,37 +97,6 @@ NSData* getX11IconData() {
 // scaling.
 // ─────────────────────────────────────────────────────────────────────────────
 
-NSData* getX11IconDataFromPath(NSString* iconPath, NSString* maskPath) {
-  NSURL* url = [NSURL fileURLWithPath: iconPath];
-  CIImage* image = [CIImage imageWithContentsOfURL: url];
-  if (maskPath) {
-    NSURL* maskUrl = [NSURL fileURLWithPath: maskPath];
-    CIImage* mask = [CIImage imageWithContentsOfURL: maskUrl];
-    CIColor* color = [CIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:0.5];
-    CIImage* background = [CIImage imageWithColor: color];
-    // Mask pixmap is typically inverted, so we swap background and image.
-    CIFilter* blend = [CIFilter filterWithName:@"CIBlendWithMask"];
-    [blend setValue:image forKey:@"inputBackgroundImage"];
-    [blend setValue:mask forKey:@"inputMaskImage"];
-    [blend setValue:background forKey:@"inputImage"];
-    image = [blend valueForKey:@"outputImage"];
-  }
-  CGSize originalSize = [image extent].size;
-  
-  NSSize targetSize = NSMakeSize(256, 256);
-  const double scale = targetSize.height / static_cast<double> (originalSize.height);
-  const double ratio = originalSize.height / static_cast<double> (originalSize.height);
-  CIFilter* scale_filter = [CIFilter filterWithName:@"CILanczosScaleTransform"];
-  [scale_filter setValue: [NSNumber numberWithFloat: scale] forKey:@"inputScale"];
-  [scale_filter setValue: [NSNumber numberWithFloat: ratio] forKey:@"inputAspectRatio"];
-  [scale_filter setValue: image forKey:@"inputImage"];
-  CIImage* outputImage = [scale_filter valueForKey:@"outputImage"];
-  NSCIImageRep* repr = [NSCIImageRep imageRepWithCIImage: outputImage];
-  NSImage* resultImage = [[NSImage alloc] initWithSize: targetSize];
-  [resultImage addRepresentation: repr];
-  NSData* data = [resultImage TIFFRepresentation];
-  return data;
-}
 
 NSString* fromStdString(const std::string& str) {
   return [NSString stringWithCString: str.c_str()encoding: NSISOLatin1StringEncoding];
@@ -155,15 +127,30 @@ NSDictionary* dictionaryForEvent(BellEvent* event, NSData* defaultIcon) {
   NSNumber* priority = [NSNumber numberWithInt: (event->percent() - 50) / 25];
   [dictionary setObject: priority forKey: @"NotificationPriority"];
   // If there is a X11 icon, convert it to be used by growl.
-  if (!event->iconPath().empty()) {
-    NSString* iconPath = [NSString stringWithCString: event->iconPath().c_str() encoding: NSUTF8StringEncoding];
-    NSString* maskPath = nil;
-    if (!event->iconMaskPath().empty()) {
-      maskPath = [NSString stringWithCString: event->iconMaskPath().c_str() encoding: NSUTF8StringEncoding];
-    }
-    NSData* icon = getX11IconDataFromPath(iconPath, maskPath);
-    [dictionary setObject: icon forKey: @"NotificationIcon"];
+  ImageProxy* image_proxy = event->imageProxy();
+  if (image_proxy != nullptr) {
+    printf("generating custom icon");
+    IconProvider* provider = [[IconProvider alloc] initWithProxy: image_proxy];
+    CIImage* image = [
+                      CIImage imageWithImageProvider: provider
+                      size: image_proxy->width() : image_proxy->height()
+                      format: kCIFormatARGB8 colorSpace: CGColorSpaceCreateDeviceRGB() options: nil ];
+    CGSize originalSize = [image extent].size;
+    NSSize targetSize = NSMakeSize(256, 256);
+    const double scale = targetSize.height / static_cast<double> (originalSize.height);
+    const double ratio = originalSize.height / static_cast<double> (originalSize.height);
+    CIFilter* scale_filter = [CIFilter filterWithName:@"CILanczosScaleTransform"];
+    [scale_filter setValue: [NSNumber numberWithFloat: scale] forKey:@"inputScale"];
+    [scale_filter setValue: [NSNumber numberWithFloat: ratio] forKey:@"inputAspectRatio"];
+    [scale_filter setValue: image forKey:@"inputImage"];
+    CIImage* outputImage = [scale_filter valueForKey:@"outputImage"];
+    NSCIImageRep* repr = [NSCIImageRep imageRepWithCIImage: outputImage];
+    NSImage* resultImage = [[NSImage alloc] initWithSize: targetSize];
+    [resultImage addRepresentation: repr];
+    NSData* icon_data = [resultImage TIFFRepresentation];
+    [dictionary setObject: icon_data forKey: @"NotificationIcon"];
   } else {
+  
     [dictionary setObject: defaultIcon forKey: @"NotificationIcon"];
   }
   return dictionary;
