@@ -9,13 +9,13 @@ The xkbgrowl program is a  small dæmon that reads X11 events (typically generat
 * Source hostname is automatically extracted and added to the message.
 * If a X11 window identity is specified, window title and icon are used for the notification.
 
-# FAQ
+## FAQ
 
-## What is xkbgrowl?
+### What is xkbgrowl?
 
 Xkbgrowl is a small Mac OS X program that connects to a X11 server and listens to so-called bell events. When such an event occurs, it is translated into a growl notification.
 
-## Ok, but what is the use?
+### Ok, but what is the use?
 
 There are two main use-cases.
 * You are running `xterm` or some similar X11 tools and would like them to send growl notifications.
@@ -23,7 +23,7 @@ There are two main use-cases.
 
 In both cases, either you use some tools that support X11 bell events natively, or you send the notifications from the command line using the `xbbell` command which is installed by default on an Unix machine that supports X11. The `xbbell` command  accepts options that are very similar to those accepted by notify-send.
 
-## How do I install xkbgrowl?
+### How do I install xkbgrowl?
 
 1. Download the latest version from the [https://github.com/wiesmann/xkbgrowl/releases/](releases section).
 2. Run the installer.
@@ -38,7 +38,7 @@ In both cases, either you use some tools that support X11 bell events natively, 
 [ -x /usr/X11R6/bin/quartz-wm ] && exec /usr/X11R6/bin/quartz-wm
 ```
 
-## What information is extracted?
+### What information is extracted?
 
 xkbgrowl attempts to translate the following information:
 * The text of the bell event (typically what is passed after xkbbell)
@@ -46,18 +46,18 @@ xkbgrowl attempts to translate the following information:
 * If an X11 window is associated with the bell event xkbgrowl retrieves its name and the name of the command.
 * If an X11 window is associated xkbgrowl tries to retrieve its window manager icon, and use it for the notification.
 
-## How to I trigger a notification?
+### How to I trigger a notification?
 
 Type xkbbell “message” in a shell. If the shell is an xterm you can do the following:
 ```xkbbell -nobeep -w $WINDOWID "Growl Works"```
 
 This will associate the notification with the xterm X11 window, xkbgrowl will then use xterm’s title and icon in the notification. By default xterm has no icon associated with its windows, but you can specify them in your .Xdefaultsfile:
 
-## How to change terminal bells into growl notifications?
+### How to change terminal bells into growl notifications?
 
 In the terminal, type ```set b on```
 
-## Why not use Growl network notifications?
+### Why not use Growl network notifications?
 
 Sending Growl network from a generic Unix box requires three things:
 * To install some package on the Unix box.
@@ -66,7 +66,7 @@ Sending Growl network from a generic Unix box requires three things:
 
 The first point is easy to fix, but goes against my philosophy to try to leave with the defaults, customising my client laptop is one thing, changing servers is another. The second point can be fixed with some hacking around, but SSH does this automatically for X11 so why bother? The last point is a security problem, ssh solves it for X11, so why re-implement that logic?
 
-## Why not use *XXX*?
+### Why not use *XXX*?
 
 There are many open source frameworks to do notifications. At a low-level, [http://www.freedesktop.org/wiki/Software/dbus/](Dbus) seems to be the standard, at a higher level there are frameworks like [http://sourceforge.net/projects/mumbles/](Mumbles). My solution does not require to install a single thing on any Unix box, it uses software that has been there since 1995, and it uses the standard.
 
