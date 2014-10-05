@@ -19,14 +19,15 @@
 
 class ImageProxy {
  public:
-  ImageProxy(int height, int width) : height_(height), width_(width) {}
+  ImageProxy(int width, int height) : width_(width), height_(height) {}
   virtual ~ImageProxy() {}
   int height() const { return height_; }
   int width() const { return width_; }
   virtual void provideARGB(int x, int y, int width, int height, void* data) = 0;
  protected:
-  const int height_;
   const int width_;
+  const int height_;
+  
 };
 
 class BellEvent {
