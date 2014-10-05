@@ -129,7 +129,6 @@ NSDictionary* dictionaryForEvent(BellEvent* event, NSData* defaultIcon) {
   // If there is a X11 icon, convert it to be used by growl.
   ImageProxy* image_proxy = event->imageProxy();
   if (image_proxy != nullptr) {
-    printf("generating custom icon");
     IconProvider* provider = [[IconProvider alloc] initWithProxy: image_proxy];
     CIImage* image = [
                       CIImage imageWithImageProvider: provider

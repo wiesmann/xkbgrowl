@@ -150,6 +150,9 @@ public:
   
   void provideARGB(int x, int y, int width, int height, void* data);
 private:
+  unsigned char* providePixel(int x, int y, unsigned char* p);
+  
+  
   XImage* pixmap_;
   XImage* mask_;
   Display* display_;
@@ -157,7 +160,6 @@ private:
 
 ImageProxyImpl::ImageProxyImpl(XImage* pixmap, XImage* mask, Display* display)
 : ImageProxy(pixmap->height, pixmap->width), pixmap_(pixmap), mask_(mask), display_(display_) {
-  printf("pixmap with depth %d %d\n", pixmap->depth, pixmap->bits_per_pixel);
 }
 
 ImageProxyImpl::~ImageProxyImpl() {
@@ -169,23 +171,37 @@ ImageProxyImpl::~ImageProxyImpl() {
   }
 }
 
+unsigned char* ImageProxyImpl::providePixel(int x, int y, unsigned char* p) {
+  const unsigned long v = XGetPixel(pixmap_, x, y);
+  // alpha
+  if (mask_ != nullptr) {
+    const unsigned long alpha_v = XGetPixel(pixmap_, x, y);
+    if (alpha_v) {
+      *p++ = 0xff;
+    } else {
+      *p++ = 0xc0;  // slightly transparent
+    }
+  } else {
+    *p++ = 0xff;
+  }
+  if (v) {
+    *p++ = 0x00;
+    *p++ = 0x00;
+    *p++ = 0x00;
+  } else {
+    *p++ = 0xff;
+    *p++ = 0xff;
+    *p++ = 0xff;
+  }
+  return p;
+}
+
 
 void ImageProxyImpl::provideARGB(int x, int y, int width, int height, void* data) {
   unsigned char* p = static_cast<unsigned char*>(data);
   for (int y_index = y; y_index < y + height; ++y_index) {
     for (int x_index = x; x_index < x + width; ++x_index) {
-      const unsigned long v = XGetPixel(pixmap_, x_index, y_index);
-      printf("%06lx ", v);
-      *p++ = 255;  // alpha
-      if (v) {
-        *p++ = 0x00;
-        *p++ = 0x00;
-        *p++ = 0x00;
-      } else {
-        *p++ = 0xff;
-        *p++ = 0xff;
-        *p++ = 0xff;
-      }
+      p = providePixel(x_index, y_index, p);
     }
   }
 }
@@ -286,10 +302,20 @@ void BellEventImpl::GetAttributesFromWindow(Window window) {
       int x, y;
       unsigned int width, height;
       unsigned int border, depth;
-      Status status = XGetGeometry(display(), wmHints_->icon_pixmap, &root, &x, &y,  &width, &height, &border, &depth);
-      if (status) {
-        XImage* pixmap = XGetImage(display(), wmHints_->icon_pixmap, 0,0, width, height, depth, ZPixmap);
-        image_proxy_.reset(new ImageProxyImpl(pixmap, nullptr, display()));
+      const Status icon_status = XGetGeometry(display(), wmHints_->icon_pixmap,
+                                              &root, &x, &y,  &width, &height, &border, &depth);
+      if (icon_status) {
+        XImage* pixmap = XGetImage(display(), wmHints_->icon_pixmap, 0, 0,
+                                   width, height, depth, ZPixmap);
+        XImage* mask = nullptr;
+        if (wmHints_->flags & IconMaskHint) {
+          const Status mask_status = XGetGeometry(display(), wmHints_->icon_mask,
+                                                  &root, &x, &y,  &width, &height, &border, &depth);
+          if (mask_status) {
+            mask = XGetImage(display(), wmHints_->icon_mask, 0, 0, width, height, depth, ZPixmap);
+          }
+        }
+        image_proxy_.reset(new ImageProxyImpl(pixmap, mask, display()));
       }
     }
   } // Has wmHints_
