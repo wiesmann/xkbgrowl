@@ -145,24 +145,27 @@ X11DisplayDataImpl::~X11DisplayDataImpl() {
 
 class ImageProxyImpl : public ImageProxy {
 public:
-  ImageProxyImpl(XImage* pixmap, XImage* mask, Display* display);
+  ImageProxyImpl(XImage* pixmap, XImage* mask, Display* display, Colormap color_map);
   ~ImageProxyImpl();
   
-  void provideARGB(int x, int y, int width, int height, void* data);
+  void provideARGB(int x, int y, int width, int height, void* data) const;
 private:
-  unsigned char* providePixel(int x, int y, unsigned char* p);
-  
-  
-  XImage* pixmap_;
-  XImage* mask_;
-  Display* display_;
+  unsigned char* providePixel(int x, int y, unsigned char* p) const;
+
+  XImage* const pixmap_;  // Icon pixmap, owned.
+  XImage* const mask_;    // Mask pixmap, owned.
+  Display* const display_;  // Display, not owned.
+  Colormap color_map_;      // Colormap
 };
 
-ImageProxyImpl::ImageProxyImpl(XImage* pixmap, XImage* mask, Display* display)
-: ImageProxy(pixmap->width, pixmap->height), pixmap_(pixmap), mask_(mask), display_(display_) {
+ImageProxyImpl::ImageProxyImpl(XImage* pixmap, XImage* mask, Display* display, Colormap color_map)
+: ImageProxy(pixmap->width, pixmap->height), pixmap_(pixmap), mask_(mask), display_(display_), color_map_(color_map) {
+  assert(display != nullptr);
+  assert(pixmap != nullptr);
 }
 
 ImageProxyImpl::~ImageProxyImpl() {
+  fprintf(stderr, "deleting proxy");
   if (pixmap_ != nullptr) {
     XDestroyImage(pixmap_);
   }
@@ -171,10 +174,29 @@ ImageProxyImpl::~ImageProxyImpl() {
   }
 }
 
-unsigned char* ImageProxyImpl::providePixel(int x, int y, unsigned char* p) {
+// Real XQueryColor crashes, figure out why. 
+Status FakeXQueryColor(Display* display, Colormap color_map, XColor* color) {
+  if (color->pixel) {
+    color->red = 0x0000;
+    color->green = 0x0000;
+    color->blue = 0x0000;
+  } else {
+    color->red = 0xffff;
+    color->green = 0xffff;
+    color->blue = 0xffff;
+  }
+  return 1;
+}
+
+unsigned char* ImageProxyImpl::providePixel(int x, int y, unsigned char* p) const {
   assert(x < width_);
   assert(y < height_);
-  const unsigned long v = XGetPixel(pixmap_, x, y);
+  XColor color;
+  color.pixel = XGetPixel(pixmap_, x, y);
+  const Status color_status = FakeXQueryColor(display_, color_map_, &color);
+  if (!color_status) {
+    fprintf(stderr, "Could not lookup pixel %d %d: %d", x, y, color_status);
+  }
   // alpha
   if (mask_ != nullptr) {
     const unsigned long alpha_v = XGetPixel(mask_, x, y);
@@ -186,20 +208,13 @@ unsigned char* ImageProxyImpl::providePixel(int x, int y, unsigned char* p) {
   } else {
     *p++ = 0xff;
   }
-  if (v) {
-    *p++ = 0x00;
-    *p++ = 0x00;
-    *p++ = 0x00;
-  } else {
-    *p++ = 0xff;
-    *p++ = 0xff;
-    *p++ = 0xff;
-  }
+  *p++ = (color.red >> 8);
+  *p++ = (color.green >> 8);
+  *p++ = (color.blue >> 8);
   return p;
 }
 
-
-void ImageProxyImpl::provideARGB(int x, int y, int width, int height, void* data) {
+void ImageProxyImpl::provideARGB(int x, int y, int width, int height, void* data) const {
   unsigned char* p = static_cast<unsigned char*>(data);
   for (int y_index = y; y_index < y + height; ++y_index) {
     for (int x_index = x; x_index < x + width; ++x_index) {
@@ -211,8 +226,6 @@ void ImageProxyImpl::provideARGB(int x, int y, int width, int height, void* data
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Concrete implementation of the BellEvent class
-// TODO: figure out a way to avoid writing out x11 icons to files and then
-// read them back
 // ─────────────────────────────────────────────────────────────────────────────
 
 class BellEventImpl : public BellEvent {
@@ -308,7 +321,7 @@ void BellEventImpl::GetAttributesFromWindow(Window window) {
                                               &root, &x, &y,  &width, &height, &border, &depth);
       if (icon_status) {
         XImage* const pixmap = XGetImage(display(), wmHints_->icon_pixmap, 0, 0,
-                                   width, height, depth, ZPixmap);
+                                         width, height, depth, ZPixmap);
         XImage* mask = nullptr;
         if (wmHints_->flags & IconMaskHint) {
           const Status mask_status = XGetGeometry(display(), wmHints_->icon_mask,
@@ -318,7 +331,8 @@ void BellEventImpl::GetAttributesFromWindow(Window window) {
                              width, height, depth, ZPixmap);
           }
         }
-        image_proxy_.reset(new ImageProxyImpl(pixmap, mask, display()));
+        Colormap color_map = DefaultColormap(display(), DefaultScreen(display()));
+        image_proxy_.reset(new ImageProxyImpl(pixmap, mask, display(), color_map));
       }
     }
   } // Has wmHints_

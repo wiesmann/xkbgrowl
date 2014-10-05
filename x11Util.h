@@ -23,7 +23,8 @@ class ImageProxy {
   virtual ~ImageProxy() {}
   int height() const { return height_; }
   int width() const { return width_; }
-  virtual void provideARGB(int x, int y, int width, int height, void* data) = 0;
+  virtual void provideARGB(int x, int y, int width, int height, void* data) const = 0;
+  void provideARGB(void *data) const { provideARGB(0, 0, width_, height_, data); }
  protected:
   const int width_;
   const int height_;

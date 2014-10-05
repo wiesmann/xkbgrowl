@@ -10,7 +10,6 @@
 		8DD76F9A0486AA7600D96B5E /* xkbgrowl.m in Sources */ = {isa = PBXBuildFile; fileRef = 08FB7796FE84155DC02AAC07 /* xkbgrowl.m */; settings = {ATTRIBUTES = (); }; };
 		8DD76F9C0486AA7600D96B5E /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 08FB779EFE84155DC02AAC07 /* Foundation.framework */; };
 		8DD76F9F0486AA7600D96B5E /* xkbgrowl.1 in CopyFiles */ = {isa = PBXBuildFile; fileRef = C6859EA3029092ED04C91782 /* xkbgrowl.1 */; };
-		E52D793319E09671001DE9A1 /* IconProvider.m in Sources */ = {isa = PBXBuildFile; fileRef = E52D793219E09671001DE9A1 /* IconProvider.m */; };
 		E56ED8F61038A033002C1CFB /* x11Util.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E56ED8F51038A033002C1CFB /* x11Util.cpp */; };
 		E5723D5319DA80B3001F0C85 /* libX11.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = E5723D5219DA80B3001F0C85 /* libX11.dylib */; };
 		E5AD3D101039CA2A0002F7F7 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E5AD3D0F1039CA2A0002F7F7 /* AppKit.framework */; };
@@ -36,8 +35,6 @@
 		8DD76FA10486AA7600D96B5E /* xkbgrowl */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = xkbgrowl; sourceTree = BUILT_PRODUCTS_DIR; };
 		C6859EA3029092ED04C91782 /* xkbgrowl.1 */ = {isa = PBXFileReference; lastKnownFileType = text.man; path = xkbgrowl.1; sourceTree = "<group>"; };
 		E507277213A60BB80097FE90 /* xkbgrowl_Prefix.pch */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = xkbgrowl_Prefix.pch; sourceTree = "<group>"; };
-		E52D793119E09671001DE9A1 /* IconProvider.h */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; path = IconProvider.h; sourceTree = "<group>"; };
-		E52D793219E09671001DE9A1 /* IconProvider.m */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; path = IconProvider.m; sourceTree = "<group>"; };
 		E56ED8F41038A033002C1CFB /* x11Util.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = x11Util.h; sourceTree = "<group>"; };
 		E56ED8F51038A033002C1CFB /* x11Util.cpp */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; path = x11Util.cpp; sourceTree = "<group>"; };
 		E5723D5219DA80B3001F0C85 /* libX11.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libX11.dylib; path = /opt/X11/lib/libX11.dylib; sourceTree = "<absolute>"; };
@@ -75,8 +72,6 @@
 		08FB7795FE84155DC02AAC07 /* Source */ = {
 			isa = PBXGroup;
 			children = (
-				E52D793119E09671001DE9A1 /* IconProvider.h */,
-				E52D793219E09671001DE9A1 /* IconProvider.m */,
 				E507277213A60BB80097FE90 /* xkbgrowl_Prefix.pch */,
 				08FB7796FE84155DC02AAC07 /* xkbgrowl.m */,
 				E56ED8F41038A033002C1CFB /* x11Util.h */,
@@ -163,7 +158,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E52D793319E09671001DE9A1 /* IconProvider.m in Sources */,
 				8DD76F9A0486AA7600D96B5E /* xkbgrowl.m in Sources */,
 				E56ED8F61038A033002C1CFB /* x11Util.cpp in Sources */,
 			);

@@ -29,7 +29,6 @@
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKit.h>
 #import <QuartzCore/CoreImage.h>
-#import "IconProvider.h"
 #include <sysexits.h>
 #include <signal.h>
 #include <getopt.h>
@@ -127,15 +126,19 @@ NSDictionary* dictionaryForEvent(BellEvent* event, NSData* defaultIcon) {
   NSNumber* priority = [NSNumber numberWithInt: (event->percent() - 50) / 25];
   [dictionary setObject: priority forKey: @"NotificationPriority"];
   // If there is a X11 icon, convert it to be used by growl.
-  ImageProxy* image_proxy = event->imageProxy();
+  const ImageProxy* image_proxy = event->imageProxy();
   if (image_proxy != nullptr) {
-    IconProvider* provider = [[IconProvider alloc] initWithProxy: image_proxy];
-    CIImage* image = [
-                      CIImage imageWithImageProvider: provider
-                      size: image_proxy->width() : image_proxy->height()
-                      format: kCIFormatARGB8 colorSpace: CGColorSpaceCreateDeviceRGB() options: nil ];
+    const size_t num_bytes = image_proxy->width() * image_proxy->height() * 4;
+    NSMutableData* buffer = [NSMutableData dataWithLength: num_bytes];
+    image_proxy->provideARGB([buffer mutableBytes]);
+    CGSize image_size = CGSizeMake(image_proxy->width(), image_proxy->height());
+    CIImage* image = [CIImage imageWithBitmapData: buffer
+                                      bytesPerRow: image_proxy->width() * 4
+                                             size: image_size
+                                           format: kCIFormatARGB8
+                                       colorSpace: nil];
     CGSize originalSize = [image extent].size;
-    NSSize targetSize = NSMakeSize(256, 256);
+    NSSize targetSize = NSMakeSize(128, 128);
     const double scale = targetSize.height / static_cast<double> (originalSize.height);
     const double ratio = originalSize.height / static_cast<double> (originalSize.height);
     CIFilter* scale_filter = [CIFilter filterWithName:@"CILanczosScaleTransform"];
@@ -209,10 +212,13 @@ int main (int argc, char* const * argv) {
   std::unique_ptr<X11DisplayData> x11Display(X11DisplayData::GetDisplayData(argv[0], display));
   id<GrowlNotificationProtocol> growlProxy = getGrowlProxy();
   
-  while(true) @autoreleasepool {
+  while(true) {
     std::unique_ptr<BellEvent> event(x11Display->NextBellEvent());
-    NSDictionary* eventDict = dictionaryForEvent(event.get(), defaultIcon);
-    [growlProxy postNotificationWithDictionary: eventDict];
+    @autoreleasepool {
+      printf("processing one event");
+      NSDictionary* eventDict = dictionaryForEvent(event.get(), defaultIcon);
+      [growlProxy postNotificationWithDictionary: eventDict];
+    }
   }
   return EX_OK;
 }
