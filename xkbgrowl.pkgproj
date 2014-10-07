@@ -439,7 +439,7 @@
 						<key>GID</key>
 						<integer>0</integer>
 						<key>PATH</key>
-						<string>archive/usr</string>
+						<string>usr</string>
 						<key>PATH_TYPE</key>
 						<integer>3</integer>
 						<key>PERMISSIONS</key>
@@ -487,8 +487,10 @@
 			<string>net.codiferes.wiesmann.xkbgrowl</string>
 			<key>OVERWRITE_PERMISSIONS</key>
 			<false/>
+			<key>USE_HFS+_COMPRESSION</key>
+			<true/>
 			<key>VERSION</key>
-			<string>1.0</string>
+			<string>1.5</string>
 		</dict>
 		<key>PROJECT_COMMENTS</key>
 		<dict>
@@ -686,6 +688,8 @@
 			</array>
 			<key>NAME</key>
 			<string>xkbgrowl</string>
+			<key>REFERENCE_FOLDER_PATH</key>
+			<string>/Users/wiesmann/Projects/personal/xkbgrowl/archive/xkbgrowl</string>
 		</dict>
 	</dict>
 	<key>TYPE</key>

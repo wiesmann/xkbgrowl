@@ -38,16 +38,6 @@ const char kEmptyString[] = "";
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Various constants
-// ─────────────────────────────────────────────────────────────────────────────
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Conversion function
-// ─────────────────────────────────────────────────────────────────────────────
-
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Abstract classes methods
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -94,6 +84,14 @@ struct X11Version {
 // Constructor for the concrete implementation
 // Most of the code is for error handling
 // ─────────────────────────────────────────────────────────────────────────────
+
+int handleError(Display* display, XErrorEvent* error) {
+  char buffer[256];
+  XGetErrorText(display, error->error_code, &buffer[0], sizeof(buffer));
+  fprintf(stderr, "X11 error: %s\n", buffer);
+  return 0;
+}
+
 X11DisplayDataImpl::X11DisplayDataImpl(
                                        const std::string& programName,
                                        const std::string& displayName)
@@ -128,6 +126,7 @@ X11DisplayDataImpl::X11DisplayDataImpl(
     fprintf(stderr, kSelectEventErrorFormat, displayName.c_str());
     exit(EX_SOFTWARE);
   }
+  XSetErrorHandler(handleError);
 }
 
 void X11DisplayDataImpl::SendBellEvent(const std::string& name) {
@@ -300,6 +299,19 @@ BellEventImpl::~BellEventImpl() {
 // • Window icon
 // ─────────────────────────────────────────────────────────────────────────────
 
+XImage* GetImage(Display* display, Drawable drawable) {
+  Window root;
+  int x, y;
+  unsigned int width, height;
+  unsigned int border, depth;
+  const Status status = XGetGeometry(display, drawable,
+                                     &root, &x, &y,  &width, &height, &border, &depth);
+  if (status) {
+    return XGetImage(display, drawable, 0, 0, width, height, depth, ZPixmap);
+  }
+  return nullptr;
+}
+
 void BellEventImpl::GetAttributesFromWindow(Window window) {
   assert(window);
   const Status nameStatus = XFetchName(display(), window, &windowName_);
@@ -311,27 +323,21 @@ void BellEventImpl::GetAttributesFromWindow(Window window) {
     fprintf(stderr, kUnknownClientNameError, window);
   }
   wmHints_ = XGetWMHints(display(), window);
+  Colormap color_map = DefaultColormap(display(), DefaultScreen(display()));
   if (wmHints_) {
+    if (wmHints_->flags & IconWindowHint) {
+      XImage* const pixmap = GetImage(display(), wmHints_->icon_window);
+      image_proxy_.reset(new ImageProxyImpl(pixmap, nullptr, display(), color_map));
+      return;
+    }
     if (wmHints_->flags & IconPixmapHint) {
-      Window root;
-      int x, y;
-      unsigned int width, height;
-      unsigned int border, depth;
-      const Status icon_status = XGetGeometry(display(), wmHints_->icon_pixmap,
-                                              &root, &x, &y,  &width, &height, &border, &depth);
-      if (icon_status) {
-        XImage* const pixmap = XGetImage(display(), wmHints_->icon_pixmap, 0, 0,
-                                         width, height, depth, ZPixmap);
+      XImage* const pixmap = GetImage(display(), wmHints_->icon_pixmap);
+      if (pixmap) {
         XImage* mask = nullptr;
         if (wmHints_->flags & IconMaskHint) {
-          const Status mask_status = XGetGeometry(display(), wmHints_->icon_mask,
-                                                  &root, &x, &y,  &width, &height, &border, &depth);
-          if (mask_status) {
-            mask = XGetImage(display(), wmHints_->icon_mask, 0, 0,
-                             width, height, depth, ZPixmap);
-          }
+          mask = GetImage(display(),wmHints_->icon_mask);
         }
-        Colormap color_map = DefaultColormap(display(), DefaultScreen(display()));
+        
         image_proxy_.reset(new ImageProxyImpl(pixmap, mask, display(), color_map));
       }
     }

@@ -34,14 +34,18 @@
 #include <getopt.h>
 #include <sandbox.h>
 #include <memory>
+#include <unistd.h>
 
 #include "x11Util.h"
 
 const char kNoGrowlError[] = "Could not connect to Growl\n";
+const char kNoSandboxError[] = "Could not initialise sandbox: %s";
 const char kGrowlVersionMessage[] = "Connected to Growl %s.\n";
+const char KNoHostname[] = "Could not retrieve hostname";
 const char kUsage[] = "X11 Keyboard bell to Growl notification bridge.\nUsage: %s [-display DISPLAY]\n";
 const char kDisplayEnv[] = "DISPLAY";
 const char kDisplayArg[] = "display";
+const char kVersionFormat[] = "xkbgrowl – built on %s";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Growl Notification interface.
@@ -118,8 +122,16 @@ NSDictionary* dictionaryForEvent(BellEvent* event, NSData* defaultIcon) {
     description = [NSString stringWithFormat: @"%@: %@", windowName, description];
   }
   if (!event->hostName().empty()) {
-    NSString* hostName = fromStdString(event->hostName());
-    description = [NSString stringWithFormat: @"%@: %@", hostName, description];
+    char hostname[256];
+    const int status = gethostname(&hostname[0], sizeof(hostname));
+    if (status) {
+      perror(KNoHostname);
+    }
+    const std::string& event_hostname = event->hostName();
+    if (!event_hostname.empty() && event_hostname != hostname) {
+      NSString* hostName = fromStdString(event_hostname);
+      description = [NSString stringWithFormat: @"%@: %@", hostName, description];
+    }
   }
   [dictionary setObject: description forKey: @"NotificationDescription"];
   // Convert volume in the [0 … 100] range to a number between 0 and 4.
@@ -172,15 +184,19 @@ char display[1024];
 int parse_options(int argc, char* const * argv) {
   strncpy(display, getenv(kDisplayEnv), sizeof(display));
   while(true) {
-    const int c = getopt_long_only(argc, argv, "d:", longopts, NULL);
+    const int c = getopt_long_only(argc, argv, "d:v", longopts, nullptr);
     switch (c) {
       case -1:
         return 0;
       case 'd':
         strncpy(display, optarg, sizeof(display));
         break;
+      case 'v':
+        printf(kVersionFormat, __DATE__);
+        exit(EX_OK);
       case 0: // long parameter
         break;
+      
       default:
         fprintf(stderr, kUsage, argv[0]);
         return EX_USAGE;
@@ -194,11 +210,13 @@ int parse_options(int argc, char* const * argv) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 
+
+
 int main (int argc, char* const * argv) {
-  char* sandbox_error = nullptr;
   // Sandbox API is deprecated, but we want to be a unix process.
-  if (sandbox_init(kSBXProfileNoWriteExceptTemporary, SANDBOX_NAMED, &sandbox_error) != 0) {
-    fprintf(stderr, "could not initialise sandbox: %s", sandbox_error);
+  char* sandbox_error = nullptr;
+  if (sandbox_init(kSBXProfileNoWriteExceptTemporary, SANDBOX_NAMED, &sandbox_error)) {
+    fprintf(stderr, kNoSandboxError, sandbox_error);
     sandbox_free_error(sandbox_error);
   }
   
@@ -215,7 +233,6 @@ int main (int argc, char* const * argv) {
   while(true) {
     std::unique_ptr<BellEvent> event(x11Display->NextBellEvent());
     @autoreleasepool {
-      printf("processing one event");
       NSDictionary* eventDict = dictionaryForEvent(event.get(), defaultIcon);
       [growlProxy postNotificationWithDictionary: eventDict];
     }
