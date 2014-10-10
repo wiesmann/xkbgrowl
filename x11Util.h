@@ -35,7 +35,7 @@ class BellEvent {
  public:
   BellEvent();
   virtual ~BellEvent();
-  virtual std::string name() const = 0;        // name of the event
+  virtual std::string name() const = 0;        // name of the event iso-latin1
   virtual std::string windowName() const = 0;  // window name or empty
   virtual std::string hostName() const = 0;    // hostname where event occured
   virtual int pitch() const = 0;               // beep pitch

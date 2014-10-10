@@ -139,13 +139,13 @@ X11DisplayDataImpl::~X11DisplayDataImpl() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Image proxy implementation
+// Image proxy implementation that holds two XImages
 // ─────────────────────────────────────────────────────────────────────────────
 
-class ImageProxyImpl : public ImageProxy {
+class XImageProxy : public ImageProxy {
 public:
-  ImageProxyImpl(XImage* pixmap, XImage* mask, Display* display, Colormap color_map);
-  ~ImageProxyImpl();
+  XImageProxy(XImage* pixmap, XImage* mask, Display* display, Colormap color_map);
+  ~XImageProxy();
   
   void provideARGB(int x, int y, int width, int height, void* data) const;
 private:
@@ -157,14 +157,13 @@ private:
   Colormap color_map_;      // Colormap
 };
 
-ImageProxyImpl::ImageProxyImpl(XImage* pixmap, XImage* mask, Display* display, Colormap color_map)
+XImageProxy::XImageProxy(XImage* pixmap, XImage* mask, Display* display, Colormap color_map)
 : ImageProxy(pixmap->width, pixmap->height), pixmap_(pixmap), mask_(mask), display_(display_), color_map_(color_map) {
   assert(display != nullptr);
   assert(pixmap != nullptr);
 }
 
-ImageProxyImpl::~ImageProxyImpl() {
-  fprintf(stderr, "deleting proxy");
+XImageProxy::~XImageProxy() {
   if (pixmap_ != nullptr) {
     XDestroyImage(pixmap_);
   }
@@ -173,7 +172,8 @@ ImageProxyImpl::~ImageProxyImpl() {
   }
 }
 
-// Real XQueryColor crashes, figure out why. 
+// The images defined in the XImages for X logos should only be one bit.
+// Strangely enough, xterm provides 8 palette colour data.
 Status FakeXQueryColor(Display* display, Colormap color_map, XColor* color) {
   if (color->pixel) {
     color->red = 0x0000;
@@ -187,7 +187,7 @@ Status FakeXQueryColor(Display* display, Colormap color_map, XColor* color) {
   return 1;
 }
 
-unsigned char* ImageProxyImpl::providePixel(int x, int y, unsigned char* p) const {
+unsigned char* XImageProxy::providePixel(int x, int y, unsigned char* p) const {
   assert(x < width_);
   assert(y < height_);
   XColor color;
@@ -202,7 +202,7 @@ unsigned char* ImageProxyImpl::providePixel(int x, int y, unsigned char* p) cons
     if (alpha_v) {
       *p++ = 0xff;
     } else {
-      *p++ = 0xc0;  // slightly transparent
+      *p++ = 0x00;
     }
   } else {
     *p++ = 0xff;
@@ -213,11 +213,47 @@ unsigned char* ImageProxyImpl::providePixel(int x, int y, unsigned char* p) cons
   return p;
 }
 
-void ImageProxyImpl::provideARGB(int x, int y, int width, int height, void* data) const {
+void XImageProxy::provideARGB(int x, int y, int width, int height, void* data) const {
   unsigned char* p = static_cast<unsigned char*>(data);
   for (int y_index = y; y_index < y + height; ++y_index) {
     for (int x_index = x; x_index < x + width; ++x_index) {
       p = providePixel(x_index, y_index, p);
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Image proxy implementation that holds raw rgb bytes
+// ─────────────────────────────────────────────────────────────────────────────
+
+class RawImageProxy : public ImageProxy {
+public:
+  RawImageProxy(int width, int height, const unsigned char* data);
+  ~RawImageProxy();
+  
+  void provideARGB(int x, int y, int width, int height, void* const data) const;
+private:
+  std::unique_ptr<unsigned char[]> pixels_;
+};
+
+RawImageProxy::RawImageProxy(int width, int height, const unsigned char* const data)
+:ImageProxy(width, height) {
+  const size_t num_bytes = width * height * 4;
+  pixels_.reset(new unsigned char[num_bytes]);
+  memcpy(pixels_.get(), data, num_bytes);
+}
+
+RawImageProxy::~RawImageProxy() {}
+
+void RawImageProxy::provideARGB(int x, int y, int width, int height, void* const data) const {
+  unsigned char* dest = static_cast<unsigned char *>(data);
+  for(int yd = 0; yd < height; ++yd) {
+    for(int xd = 0; xd < width; ++xd) {
+      const int p = (((yd + y) * width) + (xd + x)) * 4;
+      for (int c = 0; c < 4; ++c) {
+        *dest = pixels_[p + c];
+        ++dest;
+      }
     }
   }
 }
@@ -254,7 +290,7 @@ protected:
   char* windowName_;
   XTextProperty hostName_;
   XWMHints* wmHints_;
-  std::unique_ptr<ImageProxyImpl> image_proxy_;
+  std::unique_ptr<ImageProxy> image_proxy_;
 };
 
 // Constructor, gets the event from the display
@@ -322,12 +358,41 @@ void BellEventImpl::GetAttributesFromWindow(Window window) {
   if (hostStatus == 0) {
     fprintf(stderr, kUnknownClientNameError, window);
   }
+  
+  unsigned long nitems, bytesafter;
+  unsigned char *result;
+  int format;
+  Atom type;
+  Atom net_wm_icon = XInternAtom(display(), "_NET_WM_ICON", 1);
+  XGetWindowProperty(display(), window, net_wm_icon, 0, 1, 0, XA_CARDINAL,
+                     &type, &format, &nitems, &bytesafter,  &result);
+  if (result) {
+    const int icon_width = *reinterpret_cast<int*>(result);
+    XFree(result);
+    XGetWindowProperty(display(), window, net_wm_icon, 1, 1, 0, XA_CARDINAL,
+                       &type, &format,  &nitems, &bytesafter, &result);
+    if (result) {
+      const int icon_height = *reinterpret_cast<int*>(result);
+      XFree(result);
+      const int icon_size = icon_width * icon_height;
+      XGetWindowProperty(display(), window, net_wm_icon, 2, icon_size, 0, XA_CARDINAL,
+                         &type, &format,  &nitems, &bytesafter, &result);
+      if (result) {
+        image_proxy_.reset(new RawImageProxy(icon_width, icon_height, result));
+        XFree(result);
+      }
+    }
+    
+    return;
+  }
+  
+  
   wmHints_ = XGetWMHints(display(), window);
   Colormap color_map = DefaultColormap(display(), DefaultScreen(display()));
   if (wmHints_) {
     if (wmHints_->flags & IconWindowHint) {
       XImage* const pixmap = GetImage(display(), wmHints_->icon_window);
-      image_proxy_.reset(new ImageProxyImpl(pixmap, nullptr, display(), color_map));
+      image_proxy_.reset(new XImageProxy(pixmap, nullptr, display(), color_map));
       return;
     }
     if (wmHints_->flags & IconPixmapHint) {
@@ -338,7 +403,7 @@ void BellEventImpl::GetAttributesFromWindow(Window window) {
           mask = GetImage(display(),wmHints_->icon_mask);
         }
         
-        image_proxy_.reset(new ImageProxyImpl(pixmap, mask, display(), color_map));
+        image_proxy_.reset(new XImageProxy(pixmap, mask, display(), color_map));
       }
     }
   } // Has wmHints_

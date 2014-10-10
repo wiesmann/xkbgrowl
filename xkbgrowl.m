@@ -45,7 +45,8 @@ const char KNoHostname[] = "Could not retrieve hostname";
 const char kUsage[] = "X11 Keyboard bell to Growl notification bridge.\nUsage: %s [-display DISPLAY]\n";
 const char kDisplayEnv[] = "DISPLAY";
 const char kDisplayArg[] = "display";
-const char kVersionFormat[] = "xkbgrowl – built on %s";
+const char kVersionFormat[] = "xkbgrowl – built on %s\n";
+const size_t kRGBABytes = 4;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Growl Notification interface.
@@ -91,18 +92,8 @@ NSData* getX11IconData() {
   return icon;
 }
 
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Get an icon from an X11 bitmap.
-// Currently there is no real advantage in using CoreImage to do the scaling,
-// but by applying more filters, it should be possible to get a higher quality
-// scaling.
-// ─────────────────────────────────────────────────────────────────────────────
-
-
 NSString* fromStdString(const std::string& str) {
-  return [NSString stringWithCString: str.c_str()encoding: NSISOLatin1StringEncoding];
+  return [NSString stringWithCString: str.c_str()encoding: NSUTF8StringEncoding];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -137,15 +128,17 @@ NSDictionary* dictionaryForEvent(BellEvent* event, NSData* defaultIcon) {
   // Convert volume in the [0 … 100] range to a number between 0 and 4.
   NSNumber* priority = [NSNumber numberWithInt: (event->percent() - 50) / 25];
   [dictionary setObject: priority forKey: @"NotificationPriority"];
-  // If there is a X11 icon, convert it to be used by growl.
+  // If there is an icon associated with the event, convert it for Growl.
+  
   const ImageProxy* image_proxy = event->imageProxy();
   if (image_proxy != nullptr) {
-    const size_t num_bytes = image_proxy->width() * image_proxy->height() * 4;
+    // The imageProxy class does most of the heavy lifting for the conversion.
+    const size_t num_bytes = image_proxy->width() * image_proxy->height() * kRGBABytes;
     NSMutableData* buffer = [NSMutableData dataWithLength: num_bytes];
     image_proxy->provideARGB([buffer mutableBytes]);
     CGSize image_size = CGSizeMake(image_proxy->width(), image_proxy->height());
     CIImage* image = [CIImage imageWithBitmapData: buffer
-                                      bytesPerRow: image_proxy->width() * 4
+                                      bytesPerRow: image_proxy->width() * kRGBABytes
                                              size: image_size
                                            format: kCIFormatARGB8
                                        colorSpace: nil];
