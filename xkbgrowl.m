@@ -106,7 +106,9 @@ NSDictionary* dictionaryForEvent(BellEvent* event, NSData* defaultIcon) {
   NSMutableDictionary* dictionary = [[NSMutableDictionary alloc] init];
   [dictionary setObject: @"Bell" forKey:  @"NotificationName"];
   [dictionary setObject: @"XKB" forKey: @"ApplicationName"];
-  NSString* description = fromStdString(event->name());
+  NSString* title = fromStdString(event->name());
+  [dictionary setObject: title forKey: @"NotificationTitle"];
+  NSString* description = [NSString stringWithString: title];
   // If there is a window name, prepend it to the notification text
   if (!event->windowName().empty()) {
     NSString* windowName = fromStdString(event->windowName());

@@ -130,7 +130,7 @@ X11DisplayDataImpl::X11DisplayDataImpl(
 }
 
 void X11DisplayDataImpl::SendBellEvent(const std::string& name) {
-  Atom bellname_ = XInternAtom(display(), name.c_str(), False);
+  const Atom bellname_ = XInternAtom(display(), name.c_str(), False);
   XkbBellEvent(display(), None, 100, bellname_);
 }
 
@@ -343,7 +343,12 @@ XImage* GetImage(Display* display, Drawable drawable) {
   const Status status = XGetGeometry(display, drawable,
                                      &root, &x, &y,  &width, &height, &border, &depth);
   if (status) {
-    return XGetImage(display, drawable, 0, 0, width, height, depth, ZPixmap);
+    // XGetImage does not work for windows that are not somehow mapped.
+    XImage* image = XGetImage(display, drawable, 0, 0, width, height, AllPlanes, ZPixmap);
+    if (!image) {
+      fprintf(stderr, "XGetImage failed for drawable %lx\n", drawable);
+    }
+    return image;
   }
   return nullptr;
 }
@@ -358,12 +363,13 @@ void BellEventImpl::GetAttributesFromWindow(Window window) {
   if (hostStatus == 0) {
     fprintf(stderr, kUnknownClientNameError, window);
   }
-  
-  unsigned long nitems, bytesafter;
-  unsigned char *result;
+  // First try to get the _NET_WM_ICON
+  unsigned long nitems;
+  unsigned long bytesafter;
+  unsigned char* result;
   int format;
   Atom type;
-  Atom net_wm_icon = XInternAtom(display(), "_NET_WM_ICON", 1);
+  const Atom net_wm_icon = XInternAtom(display(), "_NET_WM_ICON", False);
   XGetWindowProperty(display(), window, net_wm_icon, 0, 1, 0, XA_CARDINAL,
                      &type, &format, &nitems, &bytesafter,  &result);
   if (result) {
@@ -382,32 +388,35 @@ void BellEventImpl::GetAttributesFromWindow(Window window) {
         XFree(result);
       }
     }
-    
     return;
   }
-  
-  
+  // Fallback to old-school X11 icons.
   wmHints_ = XGetWMHints(display(), window);
   Colormap color_map = DefaultColormap(display(), DefaultScreen(display()));
   if (wmHints_) {
+    // Icon Window
     if (wmHints_->flags & IconWindowHint) {
-      XImage* const pixmap = GetImage(display(), wmHints_->icon_window);
-      image_proxy_.reset(new XImageProxy(pixmap, nullptr, display(), color_map));
-      return;
+      XImage* const win_image = GetImage(display(), wmHints_->icon_window);
+      if (win_image) {
+        image_proxy_.reset(new XImageProxy(win_image, nullptr, display(), color_map));
+        return;
+      } else {
+        fprintf(stderr, "Failed to build XImage for window icon.\n");
+      }
     }
+    // Icon
     if (wmHints_->flags & IconPixmapHint) {
       XImage* const pixmap = GetImage(display(), wmHints_->icon_pixmap);
       if (pixmap) {
         XImage* mask = nullptr;
         if (wmHints_->flags & IconMaskHint) {
-          mask = GetImage(display(),wmHints_->icon_mask);
+          mask = GetImage(display(), wmHints_->icon_mask);
         }
-        
         image_proxy_.reset(new XImageProxy(pixmap, mask, display(), color_map));
       }
     }
   } // Has wmHints_
-}
+} // GetAttributesFromWindow
 
 Display* BellEventImpl::display() {
   return data_->display();
