@@ -158,7 +158,7 @@ private:
 };
 
 XImageProxy::XImageProxy(XImage* pixmap, XImage* mask, Display* display, Colormap color_map)
-: ImageProxy(pixmap->width, pixmap->height), pixmap_(pixmap), mask_(mask), display_(display_), color_map_(color_map) {
+: ImageProxy(pixmap->width, pixmap->height), pixmap_(pixmap), mask_(mask), display_(display), color_map_(color_map) {
   assert(display != nullptr);
   assert(pixmap != nullptr);
 }
